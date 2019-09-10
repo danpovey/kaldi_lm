@@ -6,8 +6,8 @@
 #include <assert.h>
 #include <ctype.h>
 #include <stdlib.h>
-#include <tr1/unordered_map>
-using std::tr1::unordered_map;
+#include <unordered_map>
+using std::unordered_map;
 using std::string;
 
 // Parses the line into a history, predicted-token, and count.
@@ -31,7 +31,7 @@ inline void parse_line(const char *line, int *N_out, std::string *history_out,
     exit(1);
   }
   const char *count_str = second_tab+1;
-  
+
   int ngram_order = 1 + (*history == '\t' ? 0 : 1);
   // N-gram order is 1 plus number of spaces
   // in the history, plus 1 if history is nonempty.
