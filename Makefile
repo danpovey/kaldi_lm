@@ -1,8 +1,10 @@
 
-CPPFLAGS = -g
+# -std=c++11 is not because it really requires c++11 support,
+# it's to work around a gcc 4.8 issue whereby unordered_map
+# requires c++11 support.
+CXXFLAGS += -g -std=c++11
 COMPILER = $(shell $(CXX) -v 2>&1 )
 ifeq ($(findstring clang,$(COMPILER)),clang)
-    CXXFLAGS += -stdlib=libc++
     LDFLAGS += -stdlib=libc++
 endif
 
