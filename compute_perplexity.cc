@@ -1,6 +1,8 @@
 #include "kaldi_lm.h"
 #include <math.h> // for log.
 
+static int warned_zero_unigram = 0;
+
 // This function is different from parse_line in kaldi_lm.h in that it
 // accepts lines with the count field prefixed with ":", which is what
 // we do for lines in the "test set".  (this ensures the ordering we
@@ -32,7 +34,7 @@ inline void parse_line_special(const char *line, int *N_out,
     exit(1);
   }
   const char *count_str = second_tab+1;
-  
+
   int ngram_order = 1 + (*history == '\t' ? 0 : 1);
   // N-gram order is 1 plus number of spaces
   // in the history, plus 1 if history is nonempty.
@@ -57,7 +59,7 @@ inline void parse_line_special(const char *line, int *N_out,
     exit(1);
   }
   *count_out = count;
-}    
+}
 
 
 
@@ -93,7 +95,7 @@ double tot_test_unk_loglike = 0.0; // log_e total likelihood of unk ("C") in tes
 // happens when "predicted" not currently a key in the hash (not
 /// sure if this is undefined behaviour)
 inline void increment_hash(const std::string &predicted,
-                           double count, 
+                           double count,
                            unordered_map<string,double> *hash) {
   unordered_map<string,double>::iterator iter = hash->find(predicted);
   if (iter == hash->end()) (*hash)[predicted] = count;
@@ -111,7 +113,7 @@ void clear_counts(int h);
 // and setting the "history" string for lower orders to sub-strings
 // of the current history string (even if they are empty).
 // This function will also resize ngram_counts if necessary.
-void ensure_history_matches(int h, const std::string &history); 
+void ensure_history_matches(int h, const std::string &history);
 
 // This function will add the given count to the N-gram counts in memory for
 // history-length "h", and predicted-word (or "*" or "%") "predicted".  You must
@@ -156,11 +158,15 @@ void process_test_set_ngram(int h_in,
       prob *= iter->second / total_count;
       break;
     } else {
-      if (h == 0) { // Nowhere to back off to... this shouldn't really occur
-        // so for now we'll crash.  Later we can make this a non-crash if needed.
-        fprintf(stderr, "compute_perplexity: no unigram-state weight for predicted word \"%s\"\n",
-                predicted.c_str());
-        exit(1);
+      if (h == 0) { // Nowhere to back off to... this shouldn't really occur.
+        if (!warned_zero_unigram) {
+          fprintf(stderr, "compute_perplexity: no unigram-state weight for predicted "
+                  "word \"%s\" (note: this is not the real word, just our internal representation. "
+                  "Will only warn once.)\n", predicted.c_str());
+          warned_zero_unigram = 1;
+        }
+        prob *= 1.0e-10;
+        break;
       } else {
         if ((iter=ngram_counts[h].counts.find("*")) ==
             ngram_counts[h].counts.end() || iter->second <= 0.0) {
@@ -169,14 +175,14 @@ void process_test_set_ngram(int h_in,
           exit(1);
         }
         prob *= iter->second / total_count;
-        h--; // And continue on whe while() loop.. this is the only path 
+        h--; // And continue on whe while() loop.. this is the only path
         // in this code that does that.
       }
     }
   }
   // Now accumulate the stats (here is also where we correct for
   // num_unk_words.
-  double log_prob; 
+  double log_prob;
   if (predicted == "C") {
     prob /= num_unk_words;
     log_prob = log(prob);
@@ -222,9 +228,9 @@ inline void process_line(char *line) {
   std::string predicted;
   double count;
   bool is_test_set_line;
-  
+
   parse_line_special(line, &n, &history, &predicted, &count, &is_test_set_line);
-  
+
   int h = n-1; // number of words in the history.
   ensure_history_matches(h, history);
   if (!is_test_set_line) {
@@ -232,7 +238,7 @@ inline void process_line(char *line) {
   } else {
     process_test_set_ngram(h, predicted, count); // Debug output, if any,
     // is produced from here, and from here the stats are incremented.
-  } 
+  }
 }
 
 int main(int argc, char **argv) {
@@ -386,4 +392,3 @@ void ensure_history_matches(int h, const std::string &history) {
     ngram_counts[h].history = history;
   }
 }
-
