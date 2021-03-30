@@ -63,7 +63,6 @@ if [ $[$heldout_sent*5] -gt $num_train_sent ]; then
   heldout_sent=$new_heldout_sent
 fi
 
-gunzip -c $dir/train.gz | head -n $heldout_sent | \
 
 # Check the path.
 ! merge_ngrams </dev/null >&/dev/null  && echo You need to have kaldi_lm on your path \
