@@ -56,7 +56,7 @@ dir=$1
 
 
 num_train_sent=$(gunzip -c $dir/train.gz | wc -l)
-if [ $[heldout_sent*5] -gt $num_train_sent ]; then
+if [ $[$heldout_sent*5] -gt $num_train_sent ]; then
   new_heldout_sent=$[$num_train_sent/5]
   echo "$0: length of input is $num_train_sent sentences; limiting heldout_sent "
   echo "...  to $new_heldout_sent (vs. default = $heldout_sent)"
