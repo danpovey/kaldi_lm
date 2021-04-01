@@ -2,9 +2,9 @@
 
 
 # This script trains an LM, using a technique closely related
-# to modified, interpolated Kneser-Ney, but which performs 
-# a bit better.  The LM is stored in a "Kaldi-LM" format, 
-# as N-gram counts; or with the --arpa option, in the ARPA 
+# to modified, interpolated Kneser-Ney, but which performs
+# a bit better.  The LM is stored in a "Kaldi-LM" format,
+# as N-gram counts; or with the --arpa option, in the ARPA
 # format.
 
 # The input is a directory where there should exist the following
@@ -54,6 +54,16 @@ dir=$1
  ( echo Expecting files $dir/train.gz and $dir/word_map to exist;
    echo E.g. see egs/wsj/s3/local/wsj_train_lm.sh for examples. ) && exit 1;
 
+
+num_train_sent=$(gunzip -c $dir/train.gz | wc -l)
+if [ $[$heldout_sent*5] -gt $num_train_sent ]; then
+  new_heldout_sent=$[$num_train_sent/5]
+  echo "$0: length of input is $num_train_sent sentences; limiting heldout_sent "
+  echo "...  to $new_heldout_sent (vs. default = $heldout_sent)"
+  heldout_sent=$new_heldout_sent
+fi
+
+
 # Check the path.
 ! merge_ngrams </dev/null >&/dev/null  && echo You need to have kaldi_lm on your path \
    && exit 1;
@@ -63,23 +73,24 @@ subdir=$dir/$lmtype
 mkdir -p $subdir
 
 
+
 if [ -s $subdir/ngrams.gz -a -s $subdir/heldout_ngrams.gz ]; then
   echo "Not creating raw N-gram counts ngrams.gz and heldout_ngrams.gz since they already exist in $subdir"
   echo "(remove them if you want them regenerated)"
-else 
+else
   echo Getting raw N-gram counts
 
   case $lmtype in
       3gram) gunzip -c $dir/train.gz | tail -n +$heldout_sent | \
           get_raw_ngrams 3 | sort | uniq -c | uniq_to_ngrams | \
-          sort | gzip -c > $subdir/ngrams.gz    
+          sort | gzip -c > $subdir/ngrams.gz
     # Note: the Perl command below adds ":" before the count, which
     # is a marker that these N-grams are test N-grams.
     gunzip -c $dir/train.gz | head -n $heldout_sent | \
         get_raw_ngrams 3 | sort | uniq -c | uniq_to_ngrams | \
-        perl -ane 's/(\S+)$/:$1/; print;' | sort | gzip -c > $subdir/heldout_ngrams.gz    
-    ;; 
-    3gram-mincount) 
+        perl -ane 's/(\S+)$/:$1/; print;' | sort | gzip -c > $subdir/heldout_ngrams.gz
+    ;;
+    3gram-mincount)
 # The following config discounts 1 from all 3-grams.
 # Note: phi doesn't matter if tau=0.
     cat >$subdir/config.get_ngrams <<EOF
@@ -90,20 +101,20 @@ EOF
     gunzip -c $dir/train.gz | tail -n +$heldout_sent | \
      get_raw_ngrams 3 | sort | uniq -c | uniq_to_ngrams | \
      sort | discount_ngrams $subdir/config.get_ngrams | \
-     sort | merge_ngrams | gzip -c > $subdir/ngrams.gz    
+     sort | merge_ngrams | gzip -c > $subdir/ngrams.gz
     gunzip -c $dir/train.gz | head -n $heldout_sent | \
         get_raw_ngrams 3 | sort | uniq -c | uniq_to_ngrams | \
-        perl -ane 's/(\S+)$/:$1/; print;' | sort | gzip -c > $subdir/heldout_ngrams.gz    
-    ;; 
-    4gram) 
+        perl -ane 's/(\S+)$/:$1/; print;' | sort | gzip -c > $subdir/heldout_ngrams.gz
+    ;;
+    4gram)
       gunzip -c $dir/train.gz | tail -n +$heldout_sent | \
        get_raw_ngrams 4 | sort | uniq -c | uniq_to_ngrams | \
-       sort | gzip -c > $subdir/ngrams.gz    
+       sort | gzip -c > $subdir/ngrams.gz
       gunzip -c $dir/train.gz | head -n $heldout_sent | \
        get_raw_ngrams 4 | sort | uniq -c | uniq_to_ngrams | \
         perl -ane 's/(\S+)$/:$1/; print;' | sort | gzip -c > $subdir/heldout_ngrams.gz
-    ;; 
-    4gram-mincount) 
+    ;;
+    4gram-mincount)
 # The following config discounts 1 from all 3-grams and 4-grams.
 # Note: phi doesn't matter if tau=0.
      cat >$subdir/config.get_ngrams <<EOF
@@ -115,11 +126,11 @@ EOF
      gunzip -c $dir/train.gz | tail -n +$heldout_sent | \
       get_raw_ngrams 4 | sort | uniq -c | uniq_to_ngrams | \
       sort | merge_ngrams | discount_ngrams $subdir/config.get_ngrams | \
-      sort | merge_ngrams | gzip -c > $subdir/ngrams.gz    
+      sort | merge_ngrams | gzip -c > $subdir/ngrams.gz
      gunzip -c $dir/train.gz | head -n $heldout_sent | \
       get_raw_ngrams 4 | sort | uniq -c | uniq_to_ngrams | \
       perl -ane 's/(\S+)$/:$1/; print;' | sort | gzip -c > $subdir/heldout_ngrams.gz
-     ;; 
+     ;;
      *)
     echo Invalid --lmtype option: $lmtype
     exit 1
@@ -391,5 +402,3 @@ fi
 
 wait
 echo Done training LM of type $lmtype
-
-
