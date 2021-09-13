@@ -22,9 +22,16 @@ heldout_sent=10000
 write_arpa=false
 cleanup=false
 lmtype=3gram-mincount
+include_heldout=false
 
 # Parse options.
-for n in `seq 3`; do
+for n in `seq 4`; do
+  if [ "$1" == "--include-heldout" ]; then
+    # If this flag is provided, the heldout data will be folded back into the
+    # main data for creating the final model
+    include_heldout=true
+    shift
+  fi
   if [ "$1" == "--arpa" ]; then
     write_arpa=true
     shift
@@ -74,7 +81,13 @@ mkdir -p $subdir
 
 
 
-if [ -s $subdir/ngrams.gz -a -s $subdir/heldout_ngrams.gz ]; then
+if $include_heldout; then
+  maybe_all_ngrams=$subdir/all_ngrams.gz
+else
+  maybe_all_ngrams=$subdir/ngrams.gz
+fi
+
+if [ -s $subdir/ngrams.gz -a -s $subdir/heldout_ngrams.gz -a -s $maybe_all_ngrams ]; then
   echo "Not creating raw N-gram counts ngrams.gz and heldout_ngrams.gz since they already exist in $subdir"
   echo "(remove them if you want them regenerated)"
 else
@@ -84,6 +97,12 @@ else
       3gram) gunzip -c $dir/train.gz | tail -n +$heldout_sent | \
           get_raw_ngrams 3 | sort | uniq -c | uniq_to_ngrams | \
           sort | gzip -c > $subdir/ngrams.gz
+      if $include_heldout; then
+        # This is duplication of data, but you'll only need this flag if you have a
+        # very small amount of data so it doesn't matter so much
+        gunzip -c $dir/train.gz | get_raw_ngrams 3 | sort | uniq -c | uniq_to_ngrams | \
+          sort | gzip -c > $subdir/all_ngrams.gz
+      fi
     # Note: the Perl command below adds ":" before the count, which
     # is a marker that these N-grams are test N-grams.
     gunzip -c $dir/train.gz | head -n $heldout_sent | \
@@ -102,6 +121,14 @@ EOF
      get_raw_ngrams 3 | sort | uniq -c | uniq_to_ngrams | \
      sort | discount_ngrams $subdir/config.get_ngrams | \
      sort | merge_ngrams | gzip -c > $subdir/ngrams.gz
+    if $include_heldout; then
+      # This is duplication of data, but you'll only need this flag if you have a
+      # very small amount of data so it doesn't matter so much
+      gunzip -c $dir/train.gz | get_raw_ngrams 3 | sort | uniq -c | uniq_to_ngrams | \
+       sort | discount_ngrams $subdir/config.get_ngrams | \
+       sort | merge_ngrams | gzip -c > $subdir/all_ngrams.gz
+    fi
+
     gunzip -c $dir/train.gz | head -n $heldout_sent | \
         get_raw_ngrams 3 | sort | uniq -c | uniq_to_ngrams | \
         perl -ane 's/(\S+)$/:$1/; print;' | sort | gzip -c > $subdir/heldout_ngrams.gz
@@ -110,6 +137,12 @@ EOF
       gunzip -c $dir/train.gz | tail -n +$heldout_sent | \
        get_raw_ngrams 4 | sort | uniq -c | uniq_to_ngrams | \
        sort | gzip -c > $subdir/ngrams.gz
+      if $include_heldout; then
+        # This is duplication of data, but you'll only need this flag if you have a
+        # very small amount of data so it doesn't matter so much
+        gunzip -c $dir/train.gz | get_raw_ngrams 4 | sort | uniq -c | uniq_to_ngrams | \
+          sort | gzip -c > $subdir/all_ngrams.gz
+      fi
       gunzip -c $dir/train.gz | head -n $heldout_sent | \
        get_raw_ngrams 4 | sort | uniq -c | uniq_to_ngrams | \
         perl -ane 's/(\S+)$/:$1/; print;' | sort | gzip -c > $subdir/heldout_ngrams.gz
@@ -127,6 +160,14 @@ EOF
       get_raw_ngrams 4 | sort | uniq -c | uniq_to_ngrams | \
       sort | merge_ngrams | discount_ngrams $subdir/config.get_ngrams | \
       sort | merge_ngrams | gzip -c > $subdir/ngrams.gz
+
+     if $include_heldout; then
+       # This is duplication of data, but you'll only need this flag if you have a
+       # very small amount of data so it doesn't matter so much
+       gunzip -c $dir/train.gz | get_raw_ngrams 4 | sort | uniq -c | uniq_to_ngrams | \
+        sort | merge_ngrams | discount_ngrams $subdir/config.get_ngrams | \
+        sort | merge_ngrams | gzip -c > $subdir/all_ngrams.gz
+     fi
      gunzip -c $dir/train.gz | head -n $heldout_sent | \
       get_raw_ngrams 4 | sort | uniq -c | uniq_to_ngrams | \
       perl -ane 's/(\S+)$/:$1/; print;' | sort | gzip -c > $subdir/heldout_ngrams.gz
@@ -390,13 +431,26 @@ gunzip -c $subdir/ngrams_disc.gz | \
 
 
 if $write_arpa; then
-  echo "Building ARPA LM (perplexity computation is in background)"
-  mkdir -p $subdir/tmpdir
-  gunzip -c $subdir/ngrams_disc.gz | \
-    interpolate_ngrams --arpa $dir/wordlist.mapped 0.5 | \
-    sort | finalize_arpa.pl $subdir/tmpdir | \
-    map_words_in_arpa.pl $dir/word_map | \
-    gzip -c > $subdir/lm_unpruned.gz
+  if $include_heldout; then
+    echo "Building ARPA LM, including held-out data (perplexity computation is in background)"
+    mkdir -p $subdir/tmpdir
+    gunzip -c $subdir/all_ngrams.gz | \
+      discount_ngrams $subdir/config.$num_configs | sort | merge_ngrams | \
+      gzip -c > $subdir/all_ngrams_disc.gz
+    gunzip -c $subdir/all_ngrams_disc.gz | \
+      interpolate_ngrams --arpa $dir/wordlist.mapped 0.5 | \
+      sort | finalize_arpa.pl $subdir/tmpdir | \
+      map_words_in_arpa.pl $dir/word_map | \
+      gzip -c > $subdir/lm_unpruned.gz
+  else
+    echo "Building ARPA LM (perplexity computation is in background)"
+    mkdir -p $subdir/tmpdir
+    gunzip -c $subdir/ngrams_disc.gz | \
+      interpolate_ngrams --arpa $dir/wordlist.mapped 0.5 | \
+      sort | finalize_arpa.pl $subdir/tmpdir | \
+      map_words_in_arpa.pl $dir/word_map | \
+      gzip -c > $subdir/lm_unpruned.gz
+  fi
 fi
 
 
