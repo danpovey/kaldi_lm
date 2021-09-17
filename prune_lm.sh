@@ -36,8 +36,16 @@ thresh=$1
 subdir=$2
 dir=$subdir/..
 
-[ ! -f $subdir/ngrams_disc.gz -o ! -f $dir/word_map ] && \
- ( echo Expecting files $subdir/ngrams_disc and $dir/word_map to exist;
+
+if [ $subdir/all_ngrams_disc.gz -nt $subdir/ngrams_disc.gz ]; then
+  echo "Using all_ngrams_disc.gz (includes held-out data)"
+  src_ngrams=$subdir/all_ngrams_disc.gz
+else
+  src_ngrams=$subdir/ngrams_disc.gz
+fi
+
+[ ! -f $src_ngrams -o ! -f $dir/word_map ] && \
+ ( echo Expecting files $src_ngrams and $dir/word_map to exist;
    echo E.g. see egs/wsj/s3/local/wsj_train_lm.sh for examples. ) && exit 1;
 
 # Check the path.
@@ -48,11 +56,11 @@ dir=$subdir/..
 
 if ! gunzip -c $subdir/ngrams_disc_pr$thresh.gz >&/dev/null; then
   echo "Pruning N-grams"
-  gunzip -c $subdir/ngrams_disc.gz | \
+  gunzip -c $src_ngrams | \
     prune_ngrams $thresh | sort | merge_ngrams | \
     sort | gzip -c >$subdir/ngrams_disc_pr$thresh.gz
 else
-  echo "Not creating discounted N-gram file $subdir/ngrams_disc_pr$thresh.gz" 
+  echo "Not creating discounted N-gram file $subdir/ngrams_disc_pr$thresh.gz"
   echo "since it already exists."
 fi
 
@@ -79,5 +87,3 @@ fi
 
 wait
 echo Done pruning LM with threshold $thresh
-
-
